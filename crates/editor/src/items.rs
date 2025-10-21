@@ -1737,16 +1737,9 @@ impl SearchableItem for Editor {
     }
 
     fn clear_replacement_preview(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
-        let inlay_ids: Vec<_> = self
-            .display_map
-            .read(cx)
-            .snapshot(cx)
-            .inlay_snapshot
-            .inlays()
-            .filter_map(|inlay| match inlay.id {
-                crate::InlayId::ReplacePreview(_) => Some(inlay.id),
-                _ => None,
-            })
+        let matches = self.get_matches(_window, cx);
+        let inlay_ids: Vec<_> = (0..matches.len() as u32)
+            .map(|i| crate::InlayId::ReplacePreview(i))
             .collect();
 
         if !inlay_ids.is_empty() {
