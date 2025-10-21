@@ -4,6 +4,7 @@ use crate::{
     SelectionEffects, ToPoint as _,
     display_map::HighlightKey,
     editor_settings::SeedQuerySetting,
+    hover_links::InlayHighlight,
     persistence::{DB, SerializedEditor},
     scroll::{ScrollAnchor, ScrollOffset},
 };
@@ -1444,6 +1445,7 @@ impl Editor {
 }
 
 pub(crate) enum BufferSearchHighlights {}
+pub(crate) enum BufferSearchReplacePreview {}
 impl SearchableItem for Editor {
     type Match = Range<Anchor>;
 
@@ -1649,6 +1651,111 @@ impl SearchableItem for Editor {
             });
         }
     }
+
+    fn update_replacement_preview(
+        &mut self,
+        matches: &[Range<Anchor>],
+        query: &SearchQuery,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use gpui::{HighlightStyle, StrikethroughStyle, px};
+        use text::Rope;
+
+        if query.replacement().is_none() || matches.is_empty() {
+            self.clear_replacement_preview(_window, cx);
+            return;
+        }
+
+        let buffer = self.buffer.read(cx);
+        let buffer_snapshot = buffer.snapshot(cx);
+
+        let mut inlays = Vec::new();
+        let mut strikethrough_ranges = Vec::new();
+        let mut inlay_highlights = Vec::new();
+
+        for (index, match_range) in matches.iter().enumerate() {
+            let match_text = buffer_snapshot
+                .text_for_range(match_range.clone())
+                .collect::<Vec<_>>();
+
+            let match_text: Cow<_> = if match_text.len() == 1 {
+                match_text.first().cloned().unwrap().into()
+            } else {
+                let joined_chunks = match_text.join("");
+                joined_chunks.into()
+            };
+
+            if let Some(replacement) = query.replacement_for(&match_text) {
+                let inlay_id = crate::InlayId::ReplacePreview(index as u32);
+                let inlay = crate::display_map::Inlay::replace_preview(
+                    index as u32,
+                    match_range.end,
+                    Rope::from(replacement.as_ref()),
+                );
+                let replacement_len = replacement.len();
+                inlays.push(inlay);
+                
+                if replacement_len > 0 {
+                    inlay_highlights.push(InlayHighlight {
+                        inlay: inlay_id,
+                        inlay_position: match_range.end,
+                        range: 0..replacement_len,
+                    });
+                }
+            }
+
+            strikethrough_ranges.push(match_range.clone());
+        }
+
+        self.splice_inlays(&[], inlays, cx);
+
+        let strikethrough_style = HighlightStyle {
+            strikethrough: Some(StrikethroughStyle {
+                thickness: px(1.),
+                color: None,
+            }),
+            ..Default::default()
+        };
+
+        self.highlight_text::<BufferSearchReplacePreview>(
+            strikethrough_ranges,
+            strikethrough_style,
+            cx,
+        );
+
+        let replacement_highlight_style = HighlightStyle {
+            background_color: Some(cx.theme().colors().editor_document_highlight_read_background),
+            ..Default::default()
+        };
+
+        self.highlight_inlays::<BufferSearchReplacePreview>(
+            inlay_highlights,
+            replacement_highlight_style,
+            cx,
+        );
+    }
+
+    fn clear_replacement_preview(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        let inlay_ids: Vec<_> = self
+            .display_map
+            .read(cx)
+            .snapshot(cx)
+            .inlay_snapshot
+            .inlays()
+            .filter_map(|inlay| match inlay.id {
+                crate::InlayId::ReplacePreview(_) => Some(inlay.id),
+                _ => None,
+            })
+            .collect();
+
+        if !inlay_ids.is_empty() {
+            self.splice_inlays(&inlay_ids, Vec::new(), cx);
+        }
+
+        self.clear_highlights::<BufferSearchReplacePreview>(cx);
+    }
+
     fn match_index_for_direction(
         &mut self,
         matches: &[Range<Anchor>],

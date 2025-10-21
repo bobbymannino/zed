@@ -700,6 +700,7 @@ impl BufferSearchBar {
         if let Some(active_editor) = self.active_searchable_item.as_mut() {
             self.selection_search_enabled = None;
             self.replace_enabled = false;
+            active_editor.clear_replacement_preview(window, cx);
             active_editor.search_bar_visibility_changed(false, window, cx);
             active_editor.toggle_filtered_search_ranges(None, window, cx);
             let handle = active_editor.item_focus_handle(cx);
@@ -1098,11 +1099,15 @@ impl BufferSearchBar {
         &mut self,
         _: Entity<Editor>,
         event: &editor::EditorEvent,
-        _: &mut Context<Self>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         match event {
             editor::EditorEvent::Focused => self.replacement_editor_focused = true,
             editor::EditorEvent::Blurred => self.replacement_editor_focused = false,
+            editor::EditorEvent::Edited { .. } => {
+                self.update_replacement_preview(window, cx);
+            }
             _ => {}
         }
     }
@@ -1288,8 +1293,12 @@ impl BufferSearchBar {
                                     .unwrap();
                                 if matches.is_empty() {
                                     active_searchable_item.clear_matches(window, cx);
+                                    active_searchable_item.clear_replacement_preview(window, cx);
                                 } else {
                                     active_searchable_item.update_matches(matches, window, cx);
+                                    if this.replace_enabled {
+                                        this.update_replacement_preview(window, cx);
+                                    }
                                 }
                                 let _ = done_tx.send(());
                             }
@@ -1325,6 +1334,32 @@ impl BufferSearchBar {
         if new_index != self.active_match_index {
             self.active_match_index = new_index;
             cx.notify();
+        }
+    }
+
+    fn update_replacement_preview(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.replace_enabled || self.query(cx).is_empty() {
+            return;
+        }
+
+        if let Some(active_searchable_item) = self.active_searchable_item.as_ref() {
+            let replacement_text = self.replacement(cx);
+            
+            if let Some(query) = &self.active_search {
+                let query_with_replacement = query.clone().with_replacement(replacement_text);
+                
+                if let Some(matches) = self
+                    .searchable_items_with_matches
+                    .get(&active_searchable_item.downgrade())
+                {
+                    active_searchable_item.update_replacement_preview(
+                        matches,
+                        &query_with_replacement,
+                        window,
+                        cx,
+                    );
+                }
+            }
         }
     }
 
@@ -1415,6 +1450,13 @@ impl BufferSearchBar {
                 self.query_editor.focus_handle(cx)
             };
             self.focus(&handle, window);
+            
+            if self.replace_enabled {
+                self.update_replacement_preview(window, cx);
+            } else if let Some(active_editor) = self.active_searchable_item.as_ref() {
+                active_editor.clear_replacement_preview(window, cx);
+            }
+            
             cx.notify();
         }
     }

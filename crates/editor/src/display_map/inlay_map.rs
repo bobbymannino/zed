@@ -99,6 +99,14 @@ impl Inlay {
         }
     }
 
+    pub fn replace_preview<T: Into<Rope>>(id: u32, position: Anchor, text: T) -> Self {
+        Self {
+            id: InlayId::ReplacePreview(id),
+            position,
+            content: InlayContent::Text(text.into()),
+        }
+    }
+
     pub fn text(&self) -> &Rope {
         static COLOR_TEXT: OnceLock<Rope> = OnceLock::new();
         match &self.content {

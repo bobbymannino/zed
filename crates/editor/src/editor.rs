@@ -284,6 +284,7 @@ pub enum InlayId {
     // LSP
     Hint(u32),
     Color(u32),
+    ReplacePreview(u32),
 }
 
 impl InlayId {
@@ -293,6 +294,7 @@ impl InlayId {
             Self::DebuggerValue(id) => *id,
             Self::Hint(id) => *id,
             Self::Color(id) => *id,
+            Self::ReplacePreview(id) => *id,
         }
     }
 }

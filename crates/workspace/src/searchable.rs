@@ -131,6 +131,15 @@ pub trait SearchableItem: Item + EventEmitter<SearchEvent> {
             self.replace(item, query, window, cx);
         }
     }
+    fn update_replacement_preview(
+        &mut self,
+        _matches: &[Self::Match],
+        _query: &SearchQuery,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) {
+    }
+    fn clear_replacement_preview(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {}
     fn match_index_for_direction(
         &mut self,
         matches: &[Self::Match],
