@@ -21,6 +21,18 @@ def fib(n):
 
 ## Configuration
 
+### Markdown Preview
+
+Zed provides a built-in markdown preview that can be opened using {#action markdown::OpenPreviewToTheSide}. You can also configure markdown files to automatically open a preview when the file is opened:
+
+```json [settings]
+  "markdown_preview": {
+    "auto_open_preview": true
+  }
+```
+
+When enabled, opening any markdown file will automatically open a preview pane to the side, allowing you to see your rendered markdown as you edit.
+
 ### Format
 
 Zed supports using Prettier to automatically re-format Markdown documents. You can trigger this manually via the {#action editor::Format} action or via the {#kb editor::Format} keyboard shortcut. Alternately, you can automatically format by enabling [`format_on_save`](../configuring-zed.md#format-on-save) in your settings.json:
