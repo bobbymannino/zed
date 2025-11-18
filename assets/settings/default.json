@@ -110,6 +110,11 @@
     // The unit for image file sizes: "binary" (KiB, MiB) or decimal (KB, MB)
     "unit": "binary"
   },
+  // Markdown preview settings
+  "markdown_preview": {
+    // Whether to automatically open the markdown preview to the side when opening a markdown file
+    "auto_open_preview": false
+  },
   // Determines the modifier to be used to add multiple cursors with the mouse. The open hover link mouse gestures will adapt such that it do not conflict with the multicursor modifier.
   //
   // 1. Maps to `Alt` on Linux and Windows and to `Option` on MacOS:
