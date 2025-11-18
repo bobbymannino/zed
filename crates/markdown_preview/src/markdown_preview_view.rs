@@ -31,7 +31,7 @@ const REPARSE_DEBOUNCE: Duration = Duration::from_millis(200);
 pub struct MarkdownPreviewView {
     workspace: WeakEntity<Workspace>,
     image_cache: Entity<RetainAllImageCache>,
-    active_editor: Option<EditorState>,
+    pub active_editor: Option<EditorState>,
     focus_handle: FocusHandle,
     contents: Option<ParsedMarkdown>,
     selected_block: usize,
@@ -49,8 +49,8 @@ pub enum MarkdownPreviewMode {
     Follow,
 }
 
-struct EditorState {
-    editor: Entity<Editor>,
+pub struct EditorState {
+    pub editor: Entity<Editor>,
     _subscription: Subscription,
 }
 
@@ -157,7 +157,7 @@ impl MarkdownPreviewView {
         None
     }
 
-    fn create_markdown_view(
+    pub fn create_markdown_view(
         workspace: &mut Workspace,
         editor: Entity<Editor>,
         window: &mut Window,

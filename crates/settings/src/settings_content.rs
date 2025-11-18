@@ -99,6 +99,9 @@ pub struct SettingsContent {
     /// The settings for the image viewer.
     pub image_viewer: Option<ImageViewerSettingsContent>,
 
+    /// The settings for the markdown preview.
+    pub markdown_preview: Option<MarkdownPreviewSettingsContent>,
+
     pub repl: Option<ReplSettingsContent>,
 
     /// Whether or not to enable Helix mode.
@@ -883,6 +886,16 @@ pub enum ImageFileSizeUnit {
     Binary,
     /// Displays file size in decimal units (e.g., KB, MB).
     Decimal,
+}
+
+/// The settings for the markdown preview.
+#[skip_serializing_none]
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, MergeFrom, Default, PartialEq)]
+pub struct MarkdownPreviewSettingsContent {
+    /// Whether to automatically open the markdown preview to the side when opening a markdown file.
+    ///
+    /// Default: false
+    pub auto_open_preview: Option<bool>,
 }
 
 #[skip_serializing_none]
