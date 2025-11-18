@@ -23,15 +23,18 @@ def fib(n):
 
 ### Markdown Preview
 
-Zed provides a built-in markdown preview that can be opened using {#action markdown::OpenPreviewToTheSide}. You can also configure markdown files to automatically open a preview when the file is opened:
+Zed provides a built-in markdown preview that can be opened using {#action markdown::OpenPreviewToTheSide}. You can also configure how markdown files are opened:
 
 ```json [settings]
   "markdown_preview": {
-    "auto_open_preview": true
+    "open_markdown_preview": "preview_to_side"
   }
 ```
 
-When enabled, opening any markdown file will automatically open a preview pane to the side, allowing you to see your rendered markdown as you edit.
+Available options:
+- `"code"` - Open only the code editor (default)
+- `"preview"` - Open only the preview
+- `"preview_to_side"` - Open the preview to the side of the code editor
 
 ### Format
 

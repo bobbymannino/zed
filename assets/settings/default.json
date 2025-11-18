@@ -112,8 +112,12 @@
   },
   // Markdown preview settings
   "markdown_preview": {
-    // Whether to automatically open the markdown preview to the side when opening a markdown file
-    "auto_open_preview": false
+    // How to open markdown files
+    // Options:
+    //  - "code": Open only the code editor (default)
+    //  - "preview": Open only the preview
+    //  - "preview_to_side": Open the preview to the side of the code editor
+    "open_markdown_preview": "code"
   },
   // Determines the modifier to be used to add multiple cursors with the mouse. The open hover link mouse gestures will adapt such that it do not conflict with the multicursor modifier.
   //

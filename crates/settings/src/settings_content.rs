@@ -888,14 +888,45 @@ pub enum ImageFileSizeUnit {
     Decimal,
 }
 
+/// How to open markdown files.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    MergeFrom,
+    Default,
+    PartialEq,
+    Eq,
+    strum::VariantArray,
+    strum::VariantNames,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum OpenMarkdownPreview {
+    /// Open only the code editor (no preview).
+    #[default]
+    Code,
+    /// Open only the preview (no code editor).
+    Preview,
+    /// Open the preview to the side of the code editor.
+    PreviewToSide,
+}
+
 /// The settings for the markdown preview.
 #[skip_serializing_none]
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, MergeFrom, Default, PartialEq)]
 pub struct MarkdownPreviewSettingsContent {
-    /// Whether to automatically open the markdown preview to the side when opening a markdown file.
+    /// How to open markdown files.
     ///
-    /// Default: false
-    pub auto_open_preview: Option<bool>,
+    /// Options:
+    /// - "code": Open only the code editor (default)
+    /// - "preview": Open only the preview
+    /// - "preview_to_side": Open the preview to the side of the code editor
+    ///
+    /// Default: "code"
+    pub open_markdown_preview: Option<OpenMarkdownPreview>,
 }
 
 #[skip_serializing_none]
