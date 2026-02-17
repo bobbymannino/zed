@@ -651,6 +651,13 @@ impl GitRepository for FakeGitRepository {
         unimplemented!()
     }
 
+    fn diff_numstat(
+        &self,
+        _diff: git::repository::DiffType,
+    ) -> BoxFuture<'_, Result<HashMap<RepoPath, git::status::DiffStat>>> {
+        future::ready(Ok(HashMap::default())).boxed()
+    }
+
     fn checkpoint(&self) -> BoxFuture<'static, Result<GitRepositoryCheckpoint>> {
         let executor = self.executor.clone();
         let fs = self.fs.clone();

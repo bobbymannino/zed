@@ -773,6 +773,11 @@ pub trait GitRepository: Send + Sync {
     /// Run git diff
     fn diff(&self, diff: DiffType) -> BoxFuture<'_, Result<String>>;
 
+    fn diff_numstat(
+        &self,
+        diff: DiffType,
+    ) -> BoxFuture<'_, Result<HashMap<RepoPath, crate::status::DiffStat>>>;
+
     /// Creates a checkpoint for the repository.
     fn checkpoint(&self) -> BoxFuture<'static, Result<GitRepositoryCheckpoint>>;
 
@@ -1837,6 +1842,38 @@ impl GitRepository for RealGitRepository {
                     String::from_utf8_lossy(&output.stderr)
                 );
                 Ok(String::from_utf8_lossy(&output.stdout).to_string())
+            })
+            .boxed()
+    }
+
+    fn diff_numstat(
+        &self,
+        diff: DiffType,
+    ) -> BoxFuture<'_, Result<HashMap<RepoPath, crate::status::DiffStat>>> {
+        let working_directory = self.working_directory();
+        let git_binary_path = self.any_git_binary_path.clone();
+        self.executor
+            .spawn(async move {
+                let staged_arg = match diff {
+                    DiffType::HeadToIndex => Some("--staged"),
+                    DiffType::HeadToWorktree => None,
+                };
+
+                let output = new_command(&git_binary_path)
+                    .current_dir(&working_directory?)
+                    .args(["diff", "--numstat"])
+                    .args(staged_arg)
+                    .output()
+                    .await?;
+
+                anyhow::ensure!(
+                    output.status.success(),
+                    "Failed to run git diff --numstat:\n{}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                Ok(crate::status::parse_numstat(&String::from_utf8_lossy(
+                    &output.stdout,
+                )))
             })
             .boxed()
     }

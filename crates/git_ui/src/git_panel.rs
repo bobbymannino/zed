@@ -28,7 +28,7 @@ use git::repository::{
     UpstreamTrackingStatus, get_git_committer,
 };
 use git::stash::GitStash;
-use git::status::StageStatus;
+use git::status::{DiffStat, StageStatus};
 use git::{Amend, Signoff, ToggleStaged, repository::RepoPath, status::FileStatus};
 use git::{
     ExpandCommitEditor, GitHostingProviderRegistry, RestoreTrackedFiles, StageAll, StashAll,
@@ -637,6 +637,8 @@ pub struct GitPanel {
     local_committer_task: Option<Task<()>>,
     bulk_staging: Option<BulkStaging>,
     stash_entries: GitStash,
+    diff_stats: HashMap<RepoPath, DiffStat>,
+    diff_stats_task: Task<()>,
     _settings_subscription: Subscription,
 }
 
@@ -803,6 +805,8 @@ impl GitPanel {
                 entry_count: 0,
                 bulk_staging: None,
                 stash_entries: Default::default(),
+                diff_stats: HashMap::default(),
+                diff_stats_task: Task::ready(()),
                 _settings_subscription,
             };
 
@@ -3679,7 +3683,45 @@ impl GitPanel {
             editor.set_placeholder_text(&placeholder_text, window, cx)
         });
 
+        self.fetch_diff_stats(cx);
+
         cx.notify();
+    }
+
+    fn fetch_diff_stats(&mut self, cx: &mut Context<Self>) {
+        let Some(repo) = self.active_repository.clone() else {
+            self.diff_stats.clear();
+            return;
+        };
+
+        let unstaged_rx = repo.update(cx, |repo, cx| {
+            repo.diff_numstat(DiffType::HeadToWorktree, cx)
+        });
+        let staged_rx = repo.update(cx, |repo, cx| repo.diff_numstat(DiffType::HeadToIndex, cx));
+
+        self.diff_stats_task = cx.spawn(async move |this, cx| {
+            let (unstaged_result, staged_result) =
+                futures::future::join(unstaged_rx, staged_rx).await;
+
+            let mut combined = unstaged_result
+                .ok()
+                .and_then(|r| r.ok())
+                .unwrap_or_default();
+
+            if let Some(staged) = staged_result.ok().and_then(|r| r.ok()) {
+                for (path, stat) in staged {
+                    let entry = combined.entry(path).or_default();
+                    entry.added += stat.added;
+                    entry.deleted += stat.deleted;
+                }
+            }
+
+            this.update(cx, |this, cx| {
+                this.diff_stats = combined;
+                cx.notify();
+            })
+            .ok();
+        });
     }
 
     fn header_state(&self, header_type: Section) -> ToggleState {
@@ -5076,6 +5118,10 @@ impl GitPanel {
             .hover(|s| s.bg(hover_bg))
             .active(|s| s.bg(active_bg))
             .child(name_row)
+            .when_some(
+                self.diff_stats.get(&entry.repo_path).copied(),
+                |el, stat| el.child(self.render_status_entry_diff_numstat(stat, cx)),
+            )
             .child(
                 div()
                     .id(checkbox_wrapper_id)
@@ -5153,6 +5199,39 @@ impl GitPanel {
                     });
                     cx.stop_propagation();
                 },
+            )
+            .into_any_element()
+    }
+
+    fn render_status_entry_diff_numstat(
+        &self,
+        diff_stat: DiffStat,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        h_flex()
+            .child(
+                div()
+                    .px_1()
+                    .rounded_l_sm()
+                    .bg(cx.theme().colors().version_control_deleted.alpha(0.1))
+                    .flex()
+                    .justify_center()
+                    .items_center()
+                    .child(format!("-{}", diff_stat.deleted))
+                    .text_size(px(9.))
+                    .text_color(cx.theme().colors().version_control_deleted),
+            )
+            .child(
+                div()
+                    .px_1()
+                    .rounded_r_sm()
+                    .bg(cx.theme().colors().version_control_added.alpha(0.1))
+                    .flex()
+                    .justify_center()
+                    .items_center()
+                    .child(format!("+{}", diff_stat.added))
+                    .text_size(px(9.))
+                    .text_color(cx.theme().colors().version_control_added),
             )
             .into_any_element()
     }

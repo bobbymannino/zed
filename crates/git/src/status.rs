@@ -575,6 +575,55 @@ impl FromStr for TreeDiff {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DiffStat {
+    pub added: u32,
+    pub deleted: u32,
+}
+
+impl DiffStat {
+    pub fn has_deletions(&self) -> bool {
+        self.deleted > 0
+    }
+
+    pub fn has_additions(&self) -> bool {
+        self.added > 0
+    }
+}
+
+/// Parses the output of `git diff --numstat` where output looks like:
+///
+/// ```text
+/// 24   12   dir/file.txt
+/// ```
+pub fn parse_numstat(output: &str) -> HashMap<RepoPath, DiffStat> {
+    let mut stats = HashMap::default();
+    for line in output.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut parts = line.splitn(3, '\t');
+        let (Some(added_str), Some(deleted_str), Some(path_str)) =
+            (parts.next(), parts.next(), parts.next())
+        else {
+            continue;
+        };
+        let Ok(added) = added_str.parse::<u32>() else {
+            continue;
+        };
+        let Ok(deleted) = deleted_str.parse::<u32>() else {
+            continue;
+        };
+        let Ok(path) = RepoPath::new(path_str) else {
+            continue;
+        };
+        let stat = DiffStat { added, deleted };
+        stats.insert(path, stat);
+    }
+    stats
+}
+
 #[cfg(test)]
 mod tests {
 
