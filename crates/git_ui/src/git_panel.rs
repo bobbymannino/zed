@@ -5209,30 +5209,36 @@ impl GitPanel {
         cx: &Context<Self>,
     ) -> AnyElement {
         h_flex()
-            .child(
-                div()
-                    .px_1()
-                    .rounded_l_sm()
-                    .bg(cx.theme().colors().version_control_deleted.alpha(0.1))
-                    .flex()
-                    .justify_center()
-                    .items_center()
-                    .child(format!("-{}", diff_stat.deleted))
-                    .text_size(px(9.))
-                    .text_color(cx.theme().colors().version_control_deleted),
-            )
-            .child(
-                div()
-                    .px_1()
-                    .rounded_r_sm()
-                    .bg(cx.theme().colors().version_control_added.alpha(0.1))
-                    .flex()
-                    .justify_center()
-                    .items_center()
-                    .child(format!("+{}", diff_stat.added))
-                    .text_size(px(9.))
-                    .text_color(cx.theme().colors().version_control_added),
-            )
+            .when(diff_stat.has_deletions(), |el| {
+                el.child(
+                    div()
+                        .px_1()
+                        .rounded_sm()
+                        .when(diff_stat.has_additions(), |el| el.rounded_r_none())
+                        .bg(cx.theme().colors().version_control_deleted.alpha(0.1))
+                        .flex()
+                        .justify_center()
+                        .items_center()
+                        .child(format!("-{}", diff_stat.deleted))
+                        .text_size(px(9.))
+                        .text_color(cx.theme().colors().version_control_deleted),
+                )
+            })
+            .when(diff_stat.has_additions(), |el| {
+                el.child(
+                    div()
+                        .px_1()
+                        .rounded_sm()
+                        .when(diff_stat.has_deletions(), |el| el.rounded_l_none())
+                        .bg(cx.theme().colors().version_control_added.alpha(0.1))
+                        .flex()
+                        .justify_center()
+                        .items_center()
+                        .child(format!("+{}", diff_stat.added))
+                        .text_size(px(9.))
+                        .text_color(cx.theme().colors().version_control_added),
+                )
+            })
             .into_any_element()
     }
 
