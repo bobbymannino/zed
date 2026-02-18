@@ -5121,7 +5121,13 @@ impl GitPanel {
             .when(GitPanelSettings::get_global(cx).diff_stats, |el| {
                 el.when_some(
                     self.diff_stats.get(&entry.repo_path).copied(),
-                    |el, stat| el.child(self.render_status_entry_diff_numstat(stat, cx)),
+                    |this, stat| {
+                        this.child(ui::DiffStat::new(
+                            "git_panel",
+                            stat.added as usize,
+                            stat.deleted as usize,
+                        ))
+                    },
                 )
             })
             .child(
@@ -5202,45 +5208,6 @@ impl GitPanel {
                     cx.stop_propagation();
                 },
             )
-            .into_any_element()
-    }
-
-    fn render_status_entry_diff_numstat(
-        &self,
-        diff_stat: DiffStat,
-        cx: &Context<Self>,
-    ) -> AnyElement {
-        h_flex()
-            .when(diff_stat.has_deletions(), |el| {
-                el.child(
-                    div()
-                        .px_1()
-                        .rounded_sm()
-                        .when(diff_stat.has_additions(), |el| el.rounded_r_none())
-                        .bg(cx.theme().colors().version_control_deleted.alpha(0.1))
-                        .flex()
-                        .justify_center()
-                        .items_center()
-                        .child(format!("-{}", diff_stat.deleted))
-                        .text_size(px(9.))
-                        .text_color(cx.theme().colors().version_control_deleted),
-                )
-            })
-            .when(diff_stat.has_additions(), |el| {
-                el.child(
-                    div()
-                        .px_1()
-                        .rounded_sm()
-                        .when(diff_stat.has_deletions(), |el| el.rounded_l_none())
-                        .bg(cx.theme().colors().version_control_added.alpha(0.1))
-                        .flex()
-                        .justify_center()
-                        .items_center()
-                        .child(format!("+{}", diff_stat.added))
-                        .text_size(px(9.))
-                        .text_color(cx.theme().colors().version_control_added),
-                )
-            })
             .into_any_element()
     }
 
