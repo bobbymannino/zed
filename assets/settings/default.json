@@ -909,7 +909,7 @@
       // Default: inherits editor scrollbar settings
       // "show": null
     },
-    /// Wether to show the addition/deletion count next to each file in the git panel
+    /// Whether to show the addition/deletion change count next to each file in the Git panel.
     ///
     /// Default: false
     "diff_stats": false,
