@@ -651,7 +651,7 @@ impl GitRepository for FakeGitRepository {
         unimplemented!()
     }
 
-    fn diff_numstat(
+    fn diff_stat(
         &self,
         _diff: git::repository::DiffType,
     ) -> BoxFuture<'_, Result<HashMap<RepoPath, git::status::DiffStat>>> {

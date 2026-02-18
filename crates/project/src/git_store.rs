@@ -5676,7 +5676,7 @@ impl Repository {
 
     /// Fetches per-line diff statistics (additions/deletions) via `git diff --numstat`.
     /// Not yet figured out remote repos...
-    pub fn diff_numstat(
+    pub fn diff_stat(
         &mut self,
         diff_type: DiffType,
         _cx: &App,
@@ -5686,7 +5686,7 @@ impl Repository {
         self.send_job(None, move |repo, _cx| async move {
             match repo {
                 RepositoryState::Local(LocalRepositoryState { backend, .. }) => {
-                    backend.diff_numstat(diff_type).await
+                    backend.diff_stat(diff_type).await
                 }
                 RepositoryState::Remote(_) => Ok(collections::HashMap::default()),
             }

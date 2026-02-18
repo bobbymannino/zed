@@ -3694,10 +3694,8 @@ impl GitPanel {
             return;
         };
 
-        let unstaged_rx = repo.update(cx, |repo, cx| {
-            repo.diff_numstat(DiffType::HeadToWorktree, cx)
-        });
-        let staged_rx = repo.update(cx, |repo, cx| repo.diff_numstat(DiffType::HeadToIndex, cx));
+        let unstaged_rx = repo.update(cx, |repo, cx| repo.diff_stat(DiffType::HeadToWorktree, cx));
+        let staged_rx = repo.update(cx, |repo, cx| repo.diff_stat(DiffType::HeadToIndex, cx));
 
         self.diff_stats_task = cx.spawn(async move |this, cx| {
             let (unstaged_result, staged_result) =

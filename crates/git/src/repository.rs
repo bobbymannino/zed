@@ -773,7 +773,7 @@ pub trait GitRepository: Send + Sync {
     /// Run git diff
     fn diff(&self, diff: DiffType) -> BoxFuture<'_, Result<String>>;
 
-    fn diff_numstat(
+    fn diff_stat(
         &self,
         diff: DiffType,
     ) -> BoxFuture<'_, Result<HashMap<RepoPath, crate::status::DiffStat>>>;
@@ -1846,7 +1846,7 @@ impl GitRepository for RealGitRepository {
             .boxed()
     }
 
-    fn diff_numstat(
+    fn diff_stat(
         &self,
         diff: DiffType,
     ) -> BoxFuture<'_, Result<HashMap<RepoPath, crate::status::DiffStat>>> {
