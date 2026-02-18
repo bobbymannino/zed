@@ -5118,10 +5118,12 @@ impl GitPanel {
             .hover(|s| s.bg(hover_bg))
             .active(|s| s.bg(active_bg))
             .child(name_row)
-            .when_some(
-                self.diff_stats.get(&entry.repo_path).copied(),
-                |el, stat| el.child(self.render_status_entry_diff_numstat(stat, cx)),
-            )
+            .when(GitPanelSettings::get_global(cx).diff_stats, |el| {
+                el.when_some(
+                    self.diff_stats.get(&entry.repo_path).copied(),
+                    |el, stat| el.child(self.render_status_entry_diff_numstat(stat, cx)),
+                )
+            })
             .child(
                 div()
                     .id(checkbox_wrapper_id)
