@@ -620,7 +620,7 @@ pub struct GitPanelSettingsContent {
     /// Default: false
     pub tree_view: Option<bool>,
 
-    /// Wether to show the addition/deletion count next to each file in the git panel
+    /// Whether to show the addition/deletion change count next to each file in the Git panel.
     ///
     /// Default: false
     pub diff_stats: Option<bool>,

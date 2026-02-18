@@ -5161,7 +5161,7 @@ fn panels_page() -> SettingsPage {
             }),
             SettingsPageItem::SettingItem(SettingItem {
                 title: "Diff Stats",
-                description: "Whether to show the addition/deletion count next to each file in the git panel.",
+                description: "Whether to show the addition/deletion change count next to each file in the Git panel.",
                 field: Box::new(SettingField {
                     json_path: Some("git_panel.diff_stats"),
                     pick: |settings_content| {
