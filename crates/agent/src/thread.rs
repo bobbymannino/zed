@@ -1,8 +1,8 @@
 use crate::{
-    ContextServerRegistry, CopyPathTool, CreateDirectoryTool, DbLanguageModel, DbThread,
-    DeletePathTool, DiagnosticsTool, EditFileTool, FetchTool, FindPathTool, GrepTool,
-    ListDirectoryTool, MovePathTool, NowTool, OpenTool, ProjectSnapshot, ReadFileTool,
-    RestoreFileFromDiskTool, SaveFileTool, StreamingEditFileTool, SubagentTool,
+    AgentGitWorktreeInfo, ContextServerRegistry, CopyPathTool, CreateDirectoryTool,
+    DbLanguageModel, DbThread, DeletePathTool, DiagnosticsTool, EditFileTool, FetchTool,
+    FindPathTool, GrepTool, ListDirectoryTool, MovePathTool, NowTool, OpenTool, ProjectSnapshot,
+    ReadFileTool, RestoreFileFromDiskTool, SaveFileTool, StreamingEditFileTool, SubagentTool,
     SystemPromptTemplate, Template, Templates, TerminalTool, ToolPermissionDecision, WebSearchTool,
     decide_permission_from_settings,
 };
@@ -60,8 +60,7 @@ use uuid::Uuid;
 
 const TOOL_CANCELED_MESSAGE: &str = "Tool canceled by user";
 pub const MAX_TOOL_NAME_LENGTH: usize = 64;
-pub const MAX_SUBAGENT_DEPTH: u8 = 4;
-pub const MAX_PARALLEL_SUBAGENTS: usize = 8;
+pub const MAX_SUBAGENT_DEPTH: u8 = 1;
 
 /// Context passed to a subagent thread for lifecycle management
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -216,6 +215,7 @@ impl UserMessage {
         const OPEN_RULES_TAG: &str =
             "<rules>\nThe user has specified the following rules that should be applied:\n";
         const OPEN_DIAGNOSTICS_TAG: &str = "<diagnostics>";
+        const OPEN_DIFFS_TAG: &str = "<diffs>";
 
         let mut file_context = OPEN_FILES_TAG.to_string();
         let mut directory_context = OPEN_DIRECTORIES_TAG.to_string();
@@ -225,6 +225,7 @@ impl UserMessage {
         let mut fetch_context = OPEN_FETCH_TAG.to_string();
         let mut rules_context = OPEN_RULES_TAG.to_string();
         let mut diagnostics_context = OPEN_DIAGNOSTICS_TAG.to_string();
+        let mut diffs_context = OPEN_DIFFS_TAG.to_string();
 
         for chunk in &self.content {
             let chunk = match chunk {
@@ -320,6 +321,18 @@ impl UserMessage {
                             )
                             .ok();
                         }
+                        MentionUri::GitDiff { base_ref } => {
+                            write!(
+                                &mut diffs_context,
+                                "\nBranch diff against {}:\n{}",
+                                base_ref,
+                                MarkdownCodeBlock {
+                                    tag: "diff",
+                                    text: content
+                                }
+                            )
+                            .ok();
+                        }
                     }
 
                     language_model::MessageContent::Text(uri.as_link().to_string())
@@ -357,6 +370,13 @@ impl UserMessage {
             message
                 .content
                 .push(language_model::MessageContent::Text(selection_context));
+        }
+
+        if diffs_context.len() > OPEN_DIFFS_TAG.len() {
+            diffs_context.push_str("</diffs>\n");
+            message
+                .content
+                .push(language_model::MessageContent::Text(diffs_context));
         }
 
         if thread_context.len() > OPEN_THREADS_TAG.len() {
@@ -581,7 +601,7 @@ pub trait TerminalHandle {
 
 pub trait SubagentHandle {
     fn id(&self) -> acp::SessionId;
-    fn wait_for_summary(&self, summary_prompt: String, cx: &AsyncApp) -> Task<Result<String>>;
+    fn wait_for_output(&self, cx: &AsyncApp) -> Task<Result<String>>;
 }
 
 pub trait ThreadEnvironment {
@@ -599,7 +619,6 @@ pub trait ThreadEnvironment {
         label: String,
         initial_prompt: String,
         timeout: Option<Duration>,
-        allowed_tools: Option<Vec<String>>,
         cx: &mut App,
     ) -> Result<Rc<dyn SubagentHandle>>;
 }
@@ -870,6 +889,8 @@ pub struct Thread {
     subagent_context: Option<SubagentContext>,
     /// Weak references to running subagent threads for cancellation propagation
     running_subagents: Vec<WeakEntity<Thread>>,
+    /// Git worktree info if this thread is running in an agent worktree.
+    git_worktree_info: Option<AgentGitWorktreeInfo>,
 }
 
 impl Thread {
@@ -960,6 +981,7 @@ impl Thread {
             imported: false,
             subagent_context: None,
             running_subagents: Vec::new(),
+            git_worktree_info: None,
         }
     }
 
@@ -1184,6 +1206,7 @@ impl Thread {
             imported: db_thread.imported,
             subagent_context: db_thread.subagent_context,
             running_subagents: Vec::new(),
+            git_worktree_info: db_thread.git_worktree_info,
         }
     }
 
@@ -1204,6 +1227,7 @@ impl Thread {
             profile: Some(self.profile_id.clone()),
             imported: self.imported,
             subagent_context: self.subagent_context.clone(),
+            git_worktree_info: self.git_worktree_info.clone(),
         };
 
         cx.background_spawn(async move {
@@ -1302,105 +1326,52 @@ impl Thread {
 
     pub fn add_default_tools(
         &mut self,
-        allowed_tool_names: Option<Vec<&str>>,
         environment: Rc<dyn ThreadEnvironment>,
         cx: &mut Context<Self>,
     ) {
         let language_registry = self.project.read(cx).languages().clone();
-        self.add_tool(
-            CopyPathTool::new(self.project.clone()),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(
-            CreateDirectoryTool::new(self.project.clone()),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(
-            DeletePathTool::new(self.project.clone(), self.action_log.clone()),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(
-            DiagnosticsTool::new(self.project.clone()),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(
-            EditFileTool::new(
-                self.project.clone(),
-                cx.weak_entity(),
-                language_registry.clone(),
-                Templates::new(),
-            ),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(
-            StreamingEditFileTool::new(
-                self.project.clone(),
-                cx.weak_entity(),
-                language_registry,
-                Templates::new(),
-            ),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(
-            FetchTool::new(self.project.read(cx).client().http_client()),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(
-            FindPathTool::new(self.project.clone()),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(
-            GrepTool::new(self.project.clone()),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(
-            ListDirectoryTool::new(self.project.clone()),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(
-            MovePathTool::new(self.project.clone()),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(NowTool, allowed_tool_names.as_ref());
-        self.add_tool(
-            OpenTool::new(self.project.clone()),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(
-            ReadFileTool::new(
-                cx.weak_entity(),
-                self.project.clone(),
-                self.action_log.clone(),
-            ),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(
-            SaveFileTool::new(self.project.clone()),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(
-            RestoreFileFromDiskTool::new(self.project.clone()),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(
-            TerminalTool::new(self.project.clone(), environment.clone()),
-            allowed_tool_names.as_ref(),
-        );
-        self.add_tool(WebSearchTool, allowed_tool_names.as_ref());
+        self.add_tool(CopyPathTool::new(self.project.clone()));
+        self.add_tool(CreateDirectoryTool::new(self.project.clone()));
+        self.add_tool(DeletePathTool::new(
+            self.project.clone(),
+            self.action_log.clone(),
+        ));
+        self.add_tool(DiagnosticsTool::new(self.project.clone()));
+        self.add_tool(EditFileTool::new(
+            self.project.clone(),
+            cx.weak_entity(),
+            language_registry.clone(),
+            Templates::new(),
+        ));
+        self.add_tool(StreamingEditFileTool::new(
+            self.project.clone(),
+            cx.weak_entity(),
+            language_registry,
+            Templates::new(),
+        ));
+        self.add_tool(FetchTool::new(self.project.read(cx).client().http_client()));
+        self.add_tool(FindPathTool::new(self.project.clone()));
+        self.add_tool(GrepTool::new(self.project.clone()));
+        self.add_tool(ListDirectoryTool::new(self.project.clone()));
+        self.add_tool(MovePathTool::new(self.project.clone()));
+        self.add_tool(NowTool);
+        self.add_tool(OpenTool::new(self.project.clone()));
+        self.add_tool(ReadFileTool::new(
+            cx.weak_entity(),
+            self.project.clone(),
+            self.action_log.clone(),
+        ));
+        self.add_tool(SaveFileTool::new(self.project.clone()));
+        self.add_tool(RestoreFileFromDiskTool::new(self.project.clone()));
+        self.add_tool(TerminalTool::new(self.project.clone(), environment.clone()));
+        self.add_tool(WebSearchTool);
 
         if cx.has_flag::<SubagentsFeatureFlag>() && self.depth() < MAX_SUBAGENT_DEPTH {
-            self.add_tool(
-                SubagentTool::new(cx.weak_entity(), environment),
-                allowed_tool_names.as_ref(),
-            );
+            self.add_tool(SubagentTool::new(cx.weak_entity(), environment));
         }
     }
 
-    pub fn add_tool<T: AgentTool>(&mut self, tool: T, allowed_tool_names: Option<&Vec<&str>>) {
-        if allowed_tool_names.is_some_and(|tool_names| !tool_names.contains(&T::NAME)) {
-            return;
-        }
-
+    pub fn add_tool<T: AgentTool>(&mut self, tool: T) {
         debug_assert!(
             !self.tools.contains_key(T::NAME),
             "Duplicate tool name: {}",
@@ -1507,6 +1478,7 @@ impl Thread {
         let model = self.model.clone()?;
         Some(acp_thread::TokenUsage {
             max_tokens: model.max_token_count(),
+            max_output_tokens: model.max_output_tokens(),
             used_tokens: usage.total_tokens(),
             input_tokens: usage.input_tokens,
             output_tokens: usage.output_tokens,
@@ -2581,11 +2553,12 @@ impl Thread {
         });
     }
 
-    pub fn running_subagent_count(&self) -> usize {
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn running_subagent_ids(&self, cx: &App) -> Vec<acp::SessionId> {
         self.running_subagents
             .iter()
-            .filter(|s| s.upgrade().is_some())
-            .count()
+            .filter_map(|s| s.upgrade().map(|s| s.read(cx).id().clone()))
+            .collect()
     }
 
     pub fn is_subagent(&self) -> bool {
