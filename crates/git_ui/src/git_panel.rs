@@ -3683,7 +3683,9 @@ impl GitPanel {
             editor.set_placeholder_text(&placeholder_text, window, cx)
         });
 
-        self.fetch_diff_stats(cx);
+        if GitPanelSettings::get_global(cx).diff_stats {
+            self.fetch_diff_stats(cx);
+        }
 
         cx.notify();
     }
