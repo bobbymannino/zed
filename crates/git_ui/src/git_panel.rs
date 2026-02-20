@@ -707,9 +707,11 @@ impl GitPanel {
 
             let mut was_sort_by_path = GitPanelSettings::get_global(cx).sort_by_path;
             let mut was_tree_view = GitPanelSettings::get_global(cx).tree_view;
+            let mut was_diff_stats = GitPanelSettings::get_global(cx).diff_stats;
             cx.observe_global_in::<SettingsStore>(window, move |this, window, cx| {
                 let sort_by_path = GitPanelSettings::get_global(cx).sort_by_path;
                 let tree_view = GitPanelSettings::get_global(cx).tree_view;
+                let diff_stats = GitPanelSettings::get_global(cx).diff_stats;
                 if tree_view != was_tree_view {
                     this.view_mode = GitPanelViewMode::from_settings(cx);
                 }
@@ -717,8 +719,18 @@ impl GitPanel {
                     this.bulk_staging.take();
                     this.update_visible_entries(window, cx);
                 }
+                if diff_stats != was_diff_stats {
+                    if diff_stats {
+                        this.fetch_diff_stats(cx);
+                    } else {
+                        this.diff_stats.clear();
+                        this.diff_stats_task = Task::ready(());
+                        cx.notify();
+                    }
+                }
                 was_sort_by_path = sort_by_path;
                 was_tree_view = tree_view;
+                was_diff_stats = diff_stats;
             })
             .detach();
 
