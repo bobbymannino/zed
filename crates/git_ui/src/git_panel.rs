@@ -3703,12 +3703,25 @@ impl GitPanel {
             let (unstaged_result, staged_result) =
                 futures::future::join(unstaged_rx, staged_rx).await;
 
-            let mut combined = unstaged_result
-                .ok()
-                .and_then(|r| r.ok())
-                .unwrap_or_default();
+            let mut combined = match unstaged_result {
+                Ok(Ok(stats)) => stats,
+                Ok(Err(err)) => {
+                    log::warn!("Failed to fetch unstaged diff stats: {err:?}");
+                    HashMap::default()
+                }
+                Err(_) => HashMap::default(),
+            };
 
-            if let Some(staged) = staged_result.ok().and_then(|r| r.ok()) {
+            let staged = match staged_result {
+                Ok(Ok(stats)) => Some(stats),
+                Ok(Err(err)) => {
+                    log::warn!("Failed to fetch staged diff stats: {err:?}");
+                    None
+                }
+                Err(_) => None,
+            };
+
+            if let Some(staged) = staged {
                 for (path, stat) in staged {
                     let entry = combined.entry(path).or_default();
                     entry.added += stat.added;
