@@ -651,7 +651,7 @@ mod tests {
         let input = "-\t-\timage.png\n5\t2\tsrc/lib.rs\n";
         let result = parse_numstat(input);
         assert_eq!(result.len(), 1);
-        assert!(result.get(&RepoPath::new("image.png").unwrap()).is_none());
+        assert!(!result.contains_key(&RepoPath::new("image.png").unwrap()));
         assert_eq!(
             result.get(&RepoPath::new("src/lib.rs").unwrap()),
             Some(&DiffStat {

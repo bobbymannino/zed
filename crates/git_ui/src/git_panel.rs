@@ -5165,6 +5165,8 @@ impl GitPanel {
                 }
             });
 
+        let id_for_diff_stat = id.clone();
+
         h_flex()
             .id(id)
             .h(self.list_item_height())
@@ -5184,9 +5186,10 @@ impl GitPanel {
             .when(GitPanelSettings::get_global(cx).diff_stats, |el| {
                 el.when_some(
                     self.diff_stats.get(&entry.repo_path).copied(),
-                    |this, stat| {
+                    move |this, stat| {
+                        let id = format!("diff-stat-{}", id_for_diff_stat);
                         this.child(ui::DiffStat::new(
-                            ("diff_stat", entry.repo_path.clone()),
+                            id,
                             stat.added as usize,
                             stat.deleted as usize,
                         ))
