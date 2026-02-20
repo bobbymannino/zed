@@ -632,6 +632,94 @@ mod tests {
         status::{TreeDiff, TreeDiffStatus},
     };
 
+    use super::{DiffStat, parse_numstat};
+
+    #[test]
+    fn test_parse_numstat_normal() {
+        let input = "10\t5\tsrc/main.rs\n3\t1\tREADME.md\n";
+        let result = parse_numstat(input);
+        assert_eq!(result.len(), 2);
+        assert_eq!(
+            result.get(&RepoPath::new("src/main.rs").unwrap()),
+            Some(&DiffStat {
+                added: 10,
+                deleted: 5
+            })
+        );
+        assert_eq!(
+            result.get(&RepoPath::new("README.md").unwrap()),
+            Some(&DiffStat {
+                added: 3,
+                deleted: 1
+            })
+        );
+    }
+
+    #[test]
+    fn test_parse_numstat_binary_files_skipped() {
+        // git diff --numstat outputs "-\t-\tpath" for binary files
+        let input = "-\t-\timage.png\n5\t2\tsrc/lib.rs\n";
+        let result = parse_numstat(input);
+        assert_eq!(result.len(), 1);
+        assert!(result.get(&RepoPath::new("image.png").unwrap()).is_none());
+        assert_eq!(
+            result.get(&RepoPath::new("src/lib.rs").unwrap()),
+            Some(&DiffStat {
+                added: 5,
+                deleted: 2
+            })
+        );
+    }
+
+    #[test]
+    fn test_parse_numstat_empty_input() {
+        assert!(parse_numstat("").is_empty());
+        assert!(parse_numstat("\n\n").is_empty());
+        assert!(parse_numstat("   \n  \n").is_empty());
+    }
+
+    #[test]
+    fn test_parse_numstat_malformed_lines_skipped() {
+        let input = "not_a_number\t5\tfile.rs\n10\t5\tvalid.rs\n";
+        let result = parse_numstat(input);
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            result.get(&RepoPath::new("valid.rs").unwrap()),
+            Some(&DiffStat {
+                added: 10,
+                deleted: 5
+            })
+        );
+    }
+
+    #[test]
+    fn test_parse_numstat_incomplete_lines_skipped() {
+        // Lines with fewer than 3 tab-separated fields are skipped
+        let input = "10\t5\n7\t3\tok.rs\n";
+        let result = parse_numstat(input);
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            result.get(&RepoPath::new("ok.rs").unwrap()),
+            Some(&DiffStat {
+                added: 7,
+                deleted: 3
+            })
+        );
+    }
+
+    #[test]
+    fn test_parse_numstat_zero_stats() {
+        let input = "0\t0\tunchanged_but_present.rs\n";
+        let result = parse_numstat(input);
+        assert_eq!(
+            result.get(&RepoPath::new("unchanged_but_present.rs").unwrap()),
+            Some(&DiffStat {
+                added: 0,
+                deleted: 0
+            })
+        );
+    }
+
     #[test]
     fn test_tree_diff_parsing() {
         let input = ":000000 100644 0000000000000000000000000000000000000000 0062c311b8727c3a2e3cd7a41bc9904feacf8f98 A\x00.zed/settings.json\x00".to_owned() +
