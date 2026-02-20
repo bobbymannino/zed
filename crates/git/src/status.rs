@@ -581,16 +581,6 @@ pub struct DiffStat {
     pub deleted: u32,
 }
 
-impl DiffStat {
-    pub fn has_deletions(&self) -> bool {
-        self.deleted > 0
-    }
-
-    pub fn has_additions(&self) -> bool {
-        self.added > 0
-    }
-}
-
 /// Parses the output of `git diff --numstat` where output looks like:
 ///
 /// ```text
