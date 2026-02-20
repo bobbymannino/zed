@@ -5121,7 +5121,7 @@ impl GitPanel {
                     self.diff_stats.get(&entry.repo_path).copied(),
                     |this, stat| {
                         this.child(ui::DiffStat::new(
-                            "git_panel",
+                            ("diff_stat", entry.repo_path.clone()),
                             stat.added as usize,
                             stat.deleted as usize,
                         ))
