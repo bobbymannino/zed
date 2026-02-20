@@ -2027,17 +2027,36 @@ impl GitRepository for RealGitRepository {
         let git_binary_path = self.any_git_binary_path.clone();
         self.executor
             .spawn(async move {
-                let staged_arg = match diff {
-                    DiffType::HeadToIndex => Some("--staged"),
-                    DiffType::HeadToWorktree => None,
+                let working_directory = working_directory?;
+                let output = match diff {
+                    DiffType::HeadToIndex => {
+                        new_command(&git_binary_path)
+                            .current_dir(&working_directory)
+                            .args(["diff", "--numstat", "--staged"])
+                            .output()
+                            .await?
+                    }
+                    DiffType::HeadToWorktree => {
+                        new_command(&git_binary_path)
+                            .current_dir(&working_directory)
+                            .args(["diff", "--numstat"])
+                            .output()
+                            .await?
+                    }
+                    DiffType::MergeBase { base_ref } => {
+                        new_command(&git_binary_path)
+                            .current_dir(&working_directory)
+                            .args([
+                                "diff",
+                                "--numstat",
+                                "--merge-base",
+                                base_ref.as_ref(),
+                                "HEAD",
+                            ])
+                            .output()
+                            .await?
+                    }
                 };
-
-                let output = new_command(&git_binary_path)
-                    .current_dir(&working_directory?)
-                    .args(["diff", "--numstat"])
-                    .args(staged_arg)
-                    .output()
-                    .await?;
 
                 anyhow::ensure!(
                     output.status.success(),
