@@ -41,7 +41,7 @@ use gpui::{
     WeakEntity, actions, anchored, deferred, point, size, uniform_list,
 };
 use itertools::Itertools;
-use language::{Buffer, File};
+use language::{Buffer, BufferEvent, File};
 use language_model::{
     ConfiguredModel, LanguageModelRegistry, LanguageModelRequest, LanguageModelRequestMessage, Role,
 };
@@ -51,6 +51,7 @@ use notifications::status_toast::{StatusToast, ToastIcon};
 use panel::{PanelHeader, panel_button, panel_filled_button, panel_icon_button};
 use project::{
     Fs, Project, ProjectPath,
+    buffer_store::BufferStoreEvent,
     git_store::{GitStoreEvent, Repository, RepositoryEvent, RepositoryId, pending_op},
     project_settings::{GitPathStyle, ProjectSettings},
 };
@@ -770,6 +771,33 @@ impl GitPanel {
                     GitStoreEvent::JobsUpdated | GitStoreEvent::ConflictsUpdated => {}
                 },
             )
+            .detach();
+
+            let buffer_store = project.read(cx).buffer_store().clone();
+
+            for buffer in project.read(cx).opened_buffers(cx) {
+                cx.subscribe(&buffer, |this, _buffer, event, cx| {
+                    if matches!(event, BufferEvent::Saved) {
+                        if GitPanelSettings::get_global(cx).diff_stats {
+                            this.fetch_diff_stats(cx);
+                        }
+                    }
+                })
+                .detach();
+            }
+
+            cx.subscribe(&buffer_store, |_this, _store, event, cx| {
+                if let BufferStoreEvent::BufferAdded(buffer) = event {
+                    cx.subscribe(buffer, |this, _buffer, event, cx| {
+                        if matches!(event, BufferEvent::Saved) {
+                            if GitPanelSettings::get_global(cx).diff_stats {
+                                this.fetch_diff_stats(cx);
+                            }
+                        }
+                    })
+                    .detach();
+                }
+            })
             .detach();
 
             let mut this = Self {
