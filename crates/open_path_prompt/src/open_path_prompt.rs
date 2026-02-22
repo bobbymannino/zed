@@ -969,9 +969,11 @@ fn get_dir_and_suffix(query: String, path_style: PathStyle) -> (String, String) 
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use util::paths::PathStyle;
 
-    use super::get_dir_and_suffix;
+    use super::{build_initial_query, get_dir_and_suffix};
 
     #[test]
     fn test_get_dir_and_suffix_with_windows_style() {
@@ -1072,5 +1074,62 @@ mod tests {
         let (dir, suffix) = get_dir_and_suffix("/root/.hidden".into(), PathStyle::Posix);
         assert_eq!(dir, "/root/");
         assert_eq!(suffix, ".hidden");
+    }
+
+    #[test]
+    fn test_build_initial_query_uses_initial_directory() {
+        let initial_directory = PathBuf::from("base_dir");
+        let query = build_initial_query(|| "ignored".to_string(), None, Some(initial_directory));
+        let expected = format!("base_dir{}", std::path::MAIN_SEPARATOR);
+        assert_eq!(query, expected);
+    }
+
+    #[test]
+    fn test_build_initial_query_preserves_trailing_separator() {
+        let initial_directory = PathBuf::from(format!("base_dir{}", std::path::MAIN_SEPARATOR));
+        let query = build_initial_query(|| "ignored".to_string(), None, Some(initial_directory));
+        let expected = format!("base_dir{}", std::path::MAIN_SEPARATOR);
+        assert_eq!(query, expected);
+    }
+
+    #[test]
+    fn test_build_initial_query_no_initial_directory() {
+        let query = build_initial_query(|| "ignored".to_string(), None, None);
+        let expected = "ignored";
+        assert_eq!(query, expected);
+    }
+
+    #[test]
+    fn test_build_initial_query_nested_directories() {
+        let query = build_initial_query(
+            || {
+                format!(
+                    "base_dir{}inner_dir{}dir{}",
+                    std::path::MAIN_SEPARATOR,
+                    std::path::MAIN_SEPARATOR,
+                    std::path::MAIN_SEPARATOR,
+                )
+            },
+            Some("file.txt".to_string()),
+            None,
+        );
+        let expected = format!(
+            "base_dir{}inner_dir{}dir{}file.txt",
+            std::path::MAIN_SEPARATOR,
+            std::path::MAIN_SEPARATOR,
+            std::path::MAIN_SEPARATOR,
+        );
+        assert_eq!(query, expected);
+    }
+
+    #[test]
+    fn test_build_initial_query_appends_suggested_name() {
+        let query = build_initial_query(
+            || format!("base_dir{}", std::path::MAIN_SEPARATOR),
+            Some("file.txt".to_string()),
+            None,
+        );
+        let expected = format!("base_dir{}file.txt", std::path::MAIN_SEPARATOR);
+        assert_eq!(query, expected);
     }
 }
