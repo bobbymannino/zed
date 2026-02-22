@@ -6334,7 +6334,7 @@ impl Editor {
         self.completion_tasks.push((id, task));
     }
 
-    #[cfg(feature = "test-support")]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn current_completions(&self) -> Option<Vec<project::Completion>> {
         let menu = self.context_menu.borrow();
         if let CodeContextMenu::Completions(menu) = menu.as_ref()? {
@@ -9459,7 +9459,7 @@ impl Editor {
 
         if target_display_point.row() < visible_row_range.start {
             return self.render_edit_prediction_scroll_popover(
-                |_| SCROLL_PADDING_Y,
+                &|_| SCROLL_PADDING_Y,
                 IconName::ArrowUp,
                 visible_row_range,
                 line_layouts,
@@ -9470,7 +9470,7 @@ impl Editor {
             );
         } else if target_display_point.row() >= visible_row_range.end {
             return self.render_edit_prediction_scroll_popover(
-                |size| text_bounds.size.height - size.height - SCROLL_PADDING_Y,
+                &|size| text_bounds.size.height - size.height - SCROLL_PADDING_Y,
                 IconName::ArrowDown,
                 visible_row_range,
                 line_layouts,
@@ -9536,7 +9536,7 @@ impl Editor {
 
     fn render_edit_prediction_scroll_popover(
         &mut self,
-        to_y: impl Fn(Size<Pixels>) -> Pixels,
+        to_y: &dyn Fn(Size<Pixels>) -> Pixels,
         scroll_icon: IconName,
         visible_row_range: Range<DisplayRow>,
         line_layouts: &[LineWithInvisibles],
@@ -13821,7 +13821,7 @@ impl Editor {
                                 let language = snapshot.language_at(selection.head());
                                 let range = selection.range();
                                 if let Some(language) = language
-                                    && language.name() == "Markdown".into()
+                                    && language.name() == "Markdown"
                                 {
                                     edit_for_markdown_paste(
                                         &snapshot,
@@ -13880,16 +13880,30 @@ impl Editor {
 
                     let mut edits = Vec::new();
 
-                    for selection in old_selections.iter() {
+                    // When pasting text without metadata (e.g. copied from an
+                    // external editor using multiple cursors) and the number of
+                    // lines matches the number of selections, distribute one
+                    // line per cursor instead of pasting the whole text at each.
+                    let lines: Vec<&str> = clipboard_text.split('\n').collect();
+                    let distribute_lines =
+                        old_selections.len() > 1 && lines.len() == old_selections.len();
+
+                    for (ix, selection) in old_selections.iter().enumerate() {
                         let language = snapshot.language_at(selection.head());
                         let range = selection.range();
 
-                        let (edit_range, edit_text) = if let Some(language) = language
-                            && language.name() == "Markdown".into()
-                        {
-                            edit_for_markdown_paste(&snapshot, range, &clipboard_text, url.clone())
+                        let text_for_cursor: &str = if distribute_lines {
+                            lines[ix]
                         } else {
-                            (range, clipboard_text.clone())
+                            &clipboard_text
+                        };
+
+                        let (edit_range, edit_text) = if let Some(language) = language
+                            && language.name() == "Markdown"
+                        {
+                            edit_for_markdown_paste(&snapshot, range, text_for_cursor, url.clone())
+                        } else {
+                            (range, Cow::Borrowed(text_for_cursor))
                         };
 
                         edits.push((edit_range, edit_text));
@@ -23573,7 +23587,7 @@ impl Editor {
             .insert(TypeId::of::<T>(), (color_fetcher, gutter_highlights));
     }
 
-    #[cfg(feature = "test-support")]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn all_text_highlights(
         &self,
         window: &mut Window,
@@ -23597,7 +23611,7 @@ impl Editor {
         })
     }
 
-    #[cfg(feature = "test-support")]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn all_text_background_highlights(
         &self,
         window: &mut Window,
@@ -23627,7 +23641,7 @@ impl Editor {
         res
     }
 
-    #[cfg(feature = "test-support")]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn search_background_highlights(&mut self, cx: &mut Context<Self>) -> Vec<Range<Point>> {
         let snapshot = self.buffer().read(cx).snapshot(cx);
 
@@ -25679,19 +25693,25 @@ fn comment_delimiter_for_newline(
     let comment_candidate = snapshot
         .chars_for_range(range.clone())
         .skip(num_of_whitespaces)
-        .take(max_len_of_delimiter)
+        .take(max_len_of_delimiter + 2)
         .collect::<String>();
-    let (delimiter, trimmed_len) = delimiters
+    let (delimiter, trimmed_len, is_repl) = delimiters
         .iter()
         .filter_map(|delimiter| {
             let prefix = delimiter.trim_end();
             if comment_candidate.starts_with(prefix) {
-                Some((delimiter, prefix.len()))
+                let is_repl = if let Some(stripped_comment) = comment_candidate.strip_prefix(prefix)
+                {
+                    stripped_comment.starts_with(" %%")
+                } else {
+                    false
+                };
+                Some((delimiter, prefix.len(), is_repl))
             } else {
                 None
             }
         })
-        .max_by_key(|(_, len)| *len)?;
+        .max_by_key(|(_, len, _)| *len)?;
 
     if let Some(BlockCommentConfig {
         start: block_start, ..
@@ -25700,7 +25720,7 @@ fn comment_delimiter_for_newline(
         let block_start_trimmed = block_start.trim_end();
         if block_start_trimmed.starts_with(delimiter.trim_end()) {
             let line_content = snapshot
-                .chars_for_range(range)
+                .chars_for_range(range.clone())
                 .skip(num_of_whitespaces)
                 .take(block_start_trimmed.len())
                 .collect::<String>();
@@ -25714,7 +25734,20 @@ fn comment_delimiter_for_newline(
     let cursor_is_placed_after_comment_marker =
         num_of_whitespaces + trimmed_len <= start_point.column as usize;
     if cursor_is_placed_after_comment_marker {
-        Some(delimiter.clone())
+        if !is_repl {
+            return Some(delimiter.clone());
+        }
+
+        let line_content_after_cursor: String = snapshot
+            .chars_for_range(range)
+            .skip(start_point.column as usize)
+            .collect();
+
+        if line_content_after_cursor.trim().is_empty() {
+            return None;
+        } else {
+            return Some(delimiter.clone());
+        }
     } else {
         None
     }
@@ -26830,7 +26863,7 @@ fn snippet_completions(
                         .enumerate()
                         .map(move |(prefix_ix, prefix)| {
                             let word_count =
-                                snippet_candidate_suffixes(prefix, is_word_char).count();
+                                snippet_candidate_suffixes(prefix, &is_word_char).count();
                             ((snippet_ix, prefix_ix), prefix, word_count)
                         })
                 })
@@ -26840,7 +26873,7 @@ fn snippet_completions(
 
             // Each prefix may be matched multiple times; the completion menu must filter out duplicates.
 
-            let buffer_windows = snippet_candidate_suffixes(&max_buffer_window, is_word_char)
+            let buffer_windows = snippet_candidate_suffixes(&max_buffer_window, &is_word_char)
                 .take(
                     sorted_snippet_candidates
                         .first()
@@ -27663,7 +27696,6 @@ impl EditorSnapshot {
     ) -> HashMap<DisplayRow, u32> {
         let initial_offset =
             self.relative_line_delta(current_selection_head, rows.start, count_wrapped_lines);
-        let current_selection_point = current_selection_head.as_display_point().to_point(self);
 
         self.row_infos(rows.start)
             .take(rows.len())
@@ -27674,23 +27706,19 @@ impl EditorSnapshot {
                     || (count_wrapped_lines && row_info.wrapped_buffer_row.is_some())
             })
             .enumerate()
-            .filter(|(_, (row, row_info))| {
-                // We want to check here that
-                // - the row is not the current selection head to ensure the current
-                // line has absolute numbering
-                // - similarly, should the selection head live in a soft-wrapped line
-                // and we are not counting those, that the parent line keeps its
-                // absolute number
-                // - lastly, if we are in a deleted line, it is fine to number this
+            .filter_map(|(i, (row, row_info))| {
+                // We want to ensure here that the current line has absolute
+                // numbering, even if we are in a soft-wrapped line. With the
+                // exception that if we are in a deleted line, we should number this
                 // relative with 0, as otherwise it would have no line number at all
-                (*row != current_selection_head
-                    && (count_wrapped_lines
-                        || row_info.buffer_row != Some(current_selection_point.row)))
+                let relative_line_number = (initial_offset + i as i64).unsigned_abs() as u32;
+
+                (relative_line_number != 0
                     || row_info
                         .diff_status
-                        .is_some_and(|status| status.is_deleted())
+                        .is_some_and(|status| status.is_deleted()))
+                .then_some((row, relative_line_number))
             })
-            .map(|(i, (row, _))| (row, (initial_offset + i as i64).unsigned_abs() as u32))
             .collect()
     }
 }
@@ -28456,10 +28484,10 @@ pub(crate) fn split_words(text: &str) -> impl std::iter::Iterator<Item = &str> +
 /// every non-word character).
 ///
 /// Shorter suffixes are returned first.
-pub(crate) fn snippet_candidate_suffixes(
-    text: &str,
-    is_word_char: impl Fn(char) -> bool,
-) -> impl std::iter::Iterator<Item = &str> {
+pub(crate) fn snippet_candidate_suffixes<'a>(
+    text: &'a str,
+    is_word_char: &'a dyn Fn(char) -> bool,
+) -> impl std::iter::Iterator<Item = &'a str> + 'a {
     let mut prev_index = text.len();
     let mut prev_codepoint = None;
     text.char_indices()
