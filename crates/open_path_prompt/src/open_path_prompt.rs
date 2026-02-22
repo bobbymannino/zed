@@ -237,18 +237,11 @@ impl OpenPathPrompt {
             let delegate =
                 OpenPathDelegate::new(tx, lister.clone(), creating_path, cx).show_hidden();
             let picker = Picker::uniform_list(delegate, window, cx).width(rems(34.));
-            let mut query = if let Some(initial_dir) = initial_directory {
-                let mut dir_str = initial_dir.to_string_lossy().into_owned();
-                if !dir_str.ends_with(std::path::MAIN_SEPARATOR) {
-                    dir_str.push(std::path::MAIN_SEPARATOR);
-                }
-                dir_str
-            } else {
-                lister.default_query(cx)
-            };
-            if let Some(suggested_name) = suggested_name {
-                query.push_str(&suggested_name);
-            }
+            let query = build_initial_query(
+                || lister.default_query(cx),
+                suggested_name,
+                initial_directory,
+            );
             picker.set_query(&query, window, cx);
             picker
         });
@@ -274,6 +267,26 @@ impl OpenPathPrompt {
             cx,
         );
     }
+}
+
+fn build_initial_query(
+    default_query: impl FnOnce() -> String,
+    suggested_name: Option<String>,
+    initial_directory: Option<PathBuf>,
+) -> String {
+    let mut query = if let Some(initial_dir) = initial_directory {
+        let mut dir_str = initial_dir.to_string_lossy().into_owned();
+        if !dir_str.ends_with(std::path::MAIN_SEPARATOR) {
+            dir_str.push(std::path::MAIN_SEPARATOR);
+        }
+        dir_str
+    } else {
+        default_query()
+    };
+    if let Some(suggested_name) = suggested_name {
+        query.push_str(&suggested_name);
+    }
+    query
 }
 
 impl PickerDelegate for OpenPathDelegate {
